@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Admin Media</title>
+<style>
+  :root {
+    --bg: #f6f7f5; --panel: #ffffff; --ink: #1d2a26; --muted: #66756f;
+    --line: #dde2de; --accent: #0f6b5c; --accent-ink: #ffffff; --danger: #b3261e;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); line-height: 1.5; }
+  [hidden] { display: none !important; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 14px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 1.05rem; margin: 0; }
+  main { max-width: 980px; margin: 0 auto; padding: 20px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 20px; }
+  label { display: block; font-size: .9rem; margin: 12px 0 4px; }
+  input[type=email], input[type=password], input[type=text] {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+  button { font: inherit; cursor: pointer; border-radius: 6px; padding: 9px 14px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  button.danger { color: var(--danger); }
+  button:disabled { opacity: .5; cursor: default; }
+  :focus-visible { outline: 3px solid #7fc4b6; outline-offset: 2px; }
+  .login { max-width: 380px; margin: 60px auto; }
+  .login h2 { margin: 0 0 4px; }
+  .msg { margin-top: 12px; font-size: .9rem; min-height: 1.3em; }
+  .msg.err { color: var(--danger); } .msg.ok { color: var(--accent); }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
+  .bar .path { color: var(--muted); font-size: .9rem; flex: 1 1 200px; }
+  .drop { border: 2px dashed var(--line); border-radius: 8px; padding: 22px; text-align: center;
+    color: var(--muted); margin-bottom: 16px; background: var(--panel); }
+  .drop.over { border-color: var(--accent); background: #eef7f4; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+  .item { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+    display: flex; flex-direction: column; }
+  .thumb { height: 140px; background: #e9ece9; display: grid; place-items: center; overflow: hidden; }
+  .thumb img, .thumb video { width: 100%; height: 100%; object-fit: cover; }
+  .thumb span { color: var(--muted); font-size: .85rem; }
+  .meta { padding: 10px 12px 6px; font-size: .85rem; word-break: break-all; }
+  .meta small { color: var(--muted); display: block; }
+  .actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 12px 12px; margin-top: auto; }
+  .actions button { padding: 5px 9px; font-size: .8rem; }
+  .empty { padding: 30px; text-align: center; color: var(--muted); }
+  @media (prefers-reduced-motion: no-preference) { button { transition: background .15s; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Admin Media</h1>
+  <div id="userbox" hidden>
+    <span id="useremail" style="color:var(--muted);font-size:.9rem;margin-right:10px"></span>
+    <button id="logout">Keluar</button>
+  </div>
+</header>
+
+<main>
+  <!-- Login -->
+  <section id="loginView" class="card login">
+    <h2>Masuk</h2>
+    <p style="color:var(--muted);margin-top:0">Khusus pengelola website.</p>
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="username">
+    <label for="password">Kata sandi</label>
+    <input id="password" type="password" autocomplete="current-password">
+    <div style="margin-top:16px"><button id="loginBtn" class="primary">Masuk</button></div>
+    <div id="loginMsg" class="msg" role="status"></div>
+  </section>
+
+  <!-- Media manager -->
+  <section id="appView" hidden>
+    <div class="bar">
+      <label for="bucketName" style="margin:0">Nama bucket</label>
+      <input id="bucketName" type="text" style="width:160px" autocomplete="off">
+      <label style="margin:0;display:flex;gap:6px;align-items:center">
+        <input id="bucketPublic" type="checkbox"> Bucket publik</label>
+      <button id="bucketBtn">Buka</button>
+    </div>
+    <div class="bar">
+      <button id="upBtn" class="primary">Unggah file</button>
+      <button id="backBtn" hidden>Kembali</button>
+      <span class="path" id="pathLabel"></span>
+      <button id="refreshBtn">Muat ulang</button>
+    </div>
+    <div id="drop" class="drop">Tarik file ke sini, atau klik Unggah file. File dengan nama yang sama akan diganti.</div>
+    <input id="fileInput" type="file" multiple hidden>
+    <div id="appMsg" class="msg" role="status"></div>
+    <div id="grid" class="grid"></div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+// Hanya URL dan kunci publik (anon) yang boleh ada di file ini.
+const SUPABASE_URL  = "https://ikhdaihqsrtulvbeqmpb.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlraGRhaWhxc3J0dWx2YmVxbXBiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyODY3NzQsImV4cCI6MjEwNzg2Mjc3NH0.BZggz9GC5dXHJlLtRZpmIzWFzecDutsSFmMFJbFM4u0";
+
+// Nama bucket dan jenisnya diatur dari halaman admin (tersimpan di browser).
+function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+let BUCKET = store("admin_bucket") || "media";
+let BUCKET_IS_PUBLIC = store("admin_public") !== "0";
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const $ = id => document.getElementById(id);
+let prefix = ""; // folder saat ini, mis. "galeri/"
+
+function say(el, text, kind) { el.textContent = text || ""; el.className = "msg" + (kind ? " " + kind : ""); }
+
+async function showApp(session) {
+  $("loginView").hidden = !!session;
+  $("appView").hidden = !session;
+  $("userbox").hidden = !session;
+  if (session) { $("useremail").textContent = session.user.email; await load(); }
+}
+
+$("loginBtn").onclick = async () => {
+  say($("loginMsg"), "Memeriksa...");
+  const { data, error } = await sb.auth.signInWithPassword({
+    email: $("email").value.trim(), password: $("password").value });
+  if (error) return say($("loginMsg"), "Gagal masuk: email atau kata sandi salah.", "err");
+  say($("loginMsg"), ""); showApp(data.session);
+};
+$("password").addEventListener("keydown", e => { if (e.key === "Enter") $("loginBtn").click(); });
+$("logout").onclick = async () => { await sb.auth.signOut(); showApp(null); };
+
+async function urlFor(path) {
+  if (BUCKET_IS_PUBLIC) return sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+  const { data } = await sb.storage.from(BUCKET).createSignedUrl(path, 3600);
+  return data ? data.signedUrl : "";
+}
+
+function kind(name) {
+  if (/\.(png|jpe?g|gif|webp|avif|svg)$/i.test(name)) return "image";
+  if (/\.(mp4|webm|mov)$/i.test(name)) return "video";
+  return "file";
+}
+function size(n) { return n > 1048576 ? (n/1048576).toFixed(1)+" MB" : Math.max(1, Math.round(n/1024))+" KB"; }
+
+async function load() {
+  say($("appMsg"), "");
+  $("pathLabel").textContent = "Bucket: " + BUCKET + (prefix ? " / " + prefix : "");
+  $("backBtn").hidden = !prefix;
+  const { data, error } = await sb.storage.from(BUCKET).list(prefix.replace(/\/$/, ""), {
+    limit: 200, sortBy: { column: "name", order: "asc" } });
+  const grid = $("grid"); grid.innerHTML = "";
+  if (error) return say($("appMsg"), "Tidak bisa memuat file: " + error.message, "err");
+  const rows = (data || []).filter(f => f.name !== ".emptyFolderPlaceholder");
+  if (!rows.length) { grid.innerHTML = '<div class="empty">Folder ini kosong. Unggah file pertama Anda.</div>'; return; }
+  for (const f of rows) {
+    const isFolder = !f.id;
+    const path = prefix + f.name;
+    const card = document.createElement("div"); card.className = "item";
+    const thumb = document.createElement("div"); thumb.className = "thumb";
+    const meta = document.createElement("div"); meta.className = "meta";
+    const acts = document.createElement("div"); acts.className = "actions";
+    meta.textContent = f.name;
+    if (isFolder) {
+      thumb.innerHTML = "<span>Folder</span>";
+      acts.append(btn("Buka", () => { prefix = path + "/"; load(); }));
+    } else {
+      const small = document.createElement("small");
+      small.textContent = size((f.metadata && f.metadata.size) || 0);
+      meta.append(small);
+      const url = await urlFor(path), k = kind(f.name);
+      if (k === "image") { const i = new Image(); i.loading = "lazy"; i.alt = f.name; i.src = url; thumb.append(i); }
+      else if (k === "video") { const v = document.createElement("video"); v.src = url; v.muted = true; v.preload = "metadata"; thumb.append(v); }
+      else thumb.innerHTML = "<span>File</span>";
+      acts.append(
+        btn("Salin link", async () => { await navigator.clipboard.writeText(url); say($("appMsg"), "Link disalin.", "ok"); }),
+        btn("Ganti", () => replaceFile(path)),
+        btn("Hapus", () => removeFile(path), "danger"));
+    }
+    card.append(thumb, meta, acts); grid.append(card);
+  }
+}
+function btn(label, fn, cls) { const b = document.createElement("button"); b.textContent = label; if (cls) b.className = cls; b.onclick = fn; return b; }
+
+async function upload(files, forcedPath) {
+  say($("appMsg"), "Mengunggah...");
+  for (const file of files) {
+    const path = forcedPath || prefix + file.name;
+    const { error } = await sb.storage.from(BUCKET).upload(path, file, { upsert: true, cacheControl: "60", contentType: file.type });
+    if (error) return say($("appMsg"), "Gagal mengunggah " + file.name + ": " + error.message, "err");
+  }
+  say($("appMsg"), "Selesai diunggah.", "ok"); load();
+}
+function replaceFile(path) {
+  const inp = document.createElement("input"); inp.type = "file";
+  inp.onchange = () => inp.files[0] && upload([inp.files[0]], path); inp.click();
+}
+async function removeFile(path) {
+  if (!confirm("Hapus " + path + "? Tindakan ini tidak bisa dibatalkan.")) return;
+  const { error } = await sb.storage.from(BUCKET).remove([path]);
+  if (error) return say($("appMsg"), "Gagal menghapus: " + error.message, "err");
+  say($("appMsg"), "Dihapus.", "ok"); load();
+}
+
+$("bucketName").value = BUCKET;
+$("bucketPublic").checked = BUCKET_IS_PUBLIC;
+$("bucketBtn").onclick = () => {
+  const name = $("bucketName").value.trim();
+  if (!name) return say($("appMsg"), "Isi nama bucket dulu.", "err");
+  BUCKET = name; BUCKET_IS_PUBLIC = $("bucketPublic").checked;
+  store("admin_bucket", BUCKET); store("admin_public", BUCKET_IS_PUBLIC ? "1" : "0");
+  prefix = ""; load();
+};
+$("upBtn").onclick = () => $("fileInput").click();
+$("fileInput").onchange = e => { upload([...e.target.files]); e.target.value = ""; };
+$("refreshBtn").onclick = load;
+$("backBtn").onclick = () => { prefix = prefix.replace(/[^/]+\/$/, ""); load(); };
+const drop = $("drop");
+["dragenter","dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => upload([...e.dataTransfer.files]));
+
+sb.auth.getSession().then(({ data }) => showApp(data.session));
+</script>
+</body>
+</html>
